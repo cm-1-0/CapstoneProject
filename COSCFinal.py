@@ -10,16 +10,14 @@ SUSPICIOUS_KEYWORDS = [
 ]
 
 # Urgent phrases and poor grammar indicators
-URGENT_LANGUAGE = ["act now", "immediately", "as soon as possible"]
-GRAMMAR_FLAGS = ["dear customer", "your account has"]
+URGENT_LANGUAGE = ["act now", "immediately", "as soon as possible", "response required", "final notice"]
+GRAMMAR_FLAGS = ["dear customer", "your account has", "we detected", "congratulations", "won a prize"]
 
 # Known safe domains (for comparison)
 TRUSTED_DOMAINS = ["google.com", "microsoft.com", "amazon.com"]
 
-
 def extract_links(text):
     return re.findall(r"https?://\S+", text)
-
 
 def domain_mismatch(sender_email, links):
     sender_domain = sender_email.split('@')[-1].lower()
@@ -30,30 +28,14 @@ def domain_mismatch(sender_email, links):
             flagged.append((link, domain))
     return flagged
 
-
 def keyword_scan(text):
-    found = []
-    for keyword in SUSPICIOUS_KEYWORDS:
-        if keyword in text.lower():
-            found.append(keyword)
-    return found
-
+    return [kw for kw in SUSPICIOUS_KEYWORDS if kw in text.lower()]
 
 def detect_urgent_language(text):
-    found = []
-    for phrase in URGENT_LANGUAGE:
-        if phrase in text.lower():
-            found.append(phrase)
-    return found
-
+    return [phrase for phrase in URGENT_LANGUAGE if phrase in text.lower()]
 
 def detect_poor_language(text):
-    found = []
-    for phrase in GRAMMAR_FLAGS:
-        if phrase in text.lower():
-            found.append(phrase)
-    return found
-
+    return [phrase for phrase in GRAMMAR_FLAGS if phrase in text.lower()]
 
 def calculate_risk(sender_email, email_text):
     score = 0
@@ -93,7 +75,6 @@ def calculate_risk(sender_email, email_text):
     final_score = min(score, 100)
     return final_score, reasons
 
-
 def fetch_emails_from_gmail(username, password, n=5):
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -113,9 +94,9 @@ def fetch_emails_from_gmail(username, password, n=5):
             if msg.is_multipart():
                 for part in msg.walk():
                     if part.get_content_type() == "text/plain":
-                        body += part.get_payload(decode=True).decode()
+                        body += part.get_payload(decode=True).decode(errors='ignore')
             else:
-                body = msg.get_payload(decode=True).decode()
+                body = msg.get_payload(decode=True).decode(errors='ignore')
 
             print(f"\nFrom: {sender}\nSubject: {subject}")
             score, reasons = calculate_risk(sender, body)
@@ -127,6 +108,8 @@ def fetch_emails_from_gmail(username, password, n=5):
     except Exception as e:
         print("Error fetching emails:", e)
 
+def fetch_emails_from_outlook():
+    print("Outlook support will require Microsoft Graph API integration. Placeholder for future implementation.")
 
 if __name__ == "__main__":
     sender = "security@micr0s0ft-support.com"
@@ -149,3 +132,6 @@ if __name__ == "__main__":
 
     # Uncomment to fetch from Gmail
     # fetch_emails_from_gmail("your_email@gmail.com", "your_password")
+
+    # Placeholder call for Outlook integration
+    # fetch_emails_from_outlook()
