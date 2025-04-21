@@ -2,6 +2,8 @@ import re
 from urllib.parse import urlparse
 import imaplib
 import email
+import tkinter as tk
+from tkinter import scrolledtext, messagebox
 
 # Suspicious keywords often found in phishing emails
 SUSPICIOUS_KEYWORDS = [
@@ -76,6 +78,7 @@ def calculate_risk(sender_email, email_text):
     return final_score, reasons
 
 def fetch_emails_from_gmail(username, password, n=5):
+    results = []
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(username, password)
@@ -98,40 +101,57 @@ def fetch_emails_from_gmail(username, password, n=5):
             else:
                 body = msg.get_payload(decode=True).decode(errors='ignore')
 
-            print(f"\nFrom: {sender}\nSubject: {subject}")
             score, reasons = calculate_risk(sender, body)
-            print("Phishing Risk Score:", score)
-            for reason in reasons:
-                print("-", reason)
+            results.append((sender, subject, score, reasons))
 
         mail.logout()
     except Exception as e:
-        print("Error fetching emails:", e)
+        results.append(("Error", str(e), 0, []))
+    return results
 
 def fetch_emails_from_outlook():
-    print("Outlook support will require Microsoft Graph API integration. Placeholder for future implementation.")
+    return [("Outlook Support", "Not yet implemented - Microsoft Graph API required", 0, ["Placeholder"])]
+
+def run_gui():
+    def analyze_sample():
+        sender = sender_entry.get()
+        body = body_text.get("1.0", tk.END)
+        score, reasons = calculate_risk(sender, body)
+        result_text.delete("1.0", tk.END)
+        result_text.insert(tk.END, f"Phishing Risk Score: {score}\n")
+        for reason in reasons:
+            result_text.insert(tk.END, f"- {reason}\n")
+
+    window = tk.Tk()
+    window.title("Phishing Email Detector")
+
+    tk.Label(window, text="Sender Email:").pack()
+    sender_entry = tk.Entry(window, width=50)
+    sender_entry.pack()
+
+    tk.Label(window, text="Email Body:").pack()
+    body_text = scrolledtext.ScrolledText(window, width=60, height=10)
+    body_text.pack()
+
+    tk.Button(window, text="Analyze", command=analyze_sample).pack(pady=10)
+
+    tk.Label(window, text="Results:").pack()
+    result_text = scrolledtext.ScrolledText(window, width=60, height=10)
+    result_text.pack()
+
+    window.mainloop()
 
 if __name__ == "__main__":
-    sender = "security@micr0s0ft-support.com"
-    email_body = """
-    Dear customer,
-
-    Your account has been locked due to suspicious activity. Please act now to verify your account.
-    Click here: http://fake-microsoft.com/verify
-
-    Thank you,
-    Microsoft Support
-    """
-
-    risk_score, flags = calculate_risk(sender, email_body)
-
-    print("Phishing Risk Score:", risk_score)
-    print("Reasons:")
-    for reason in flags:
-        print("-", reason)
+    # Run GUI for user interaction
+    run_gui()
 
     # Uncomment to fetch from Gmail
-    # fetch_emails_from_gmail("your_email@gmail.com", "your_password")
+    # results = fetch_emails_from_gmail("your_email@gmail.com", "your_password")
+    # for sender, subject, score, reasons in results:
+    #     print(f"\nFrom: {sender}\nSubject: {subject}")
+    #     print("Phishing Risk Score:", score)
+    #     for reason in reasons:
+    #         print("-", reason)
 
     # Placeholder call for Outlook integration
     # fetch_emails_from_outlook()
