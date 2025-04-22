@@ -1,9 +1,10 @@
 import re
+import pickle
 from urllib.parse import urlparse
 import imaplib
 import email
 import tkinter as tk
-from tkinter import scrolledtext, messagebox
+from tkinter import scrolledtext, messagebox, ttk
 
 # Suspicious keywords often found in phishing emails
 SUSPICIOUS_KEYWORDS = [
@@ -73,85 +74,69 @@ def calculate_risk(sender_email, email_text):
         score += 10
         reasons.append(f"Potentially suspicious language: {', '.join(grammar_flags)}")
 
-    # Normalize score
     final_score = min(score, 100)
     return final_score, reasons
 
-def fetch_emails_from_gmail(username, password, n=5):
-    results = []
+def ml_detect(email_text):
     try:
-        mail = imaplib.IMAP4_SSL("imap.gmail.com")
-        mail.login(username, password)
-        mail.select("inbox")
-
-        result, data = mail.search(None, "ALL")
-        email_ids = data[0].split()[-n:]
-        for email_id in email_ids:
-            result, data = mail.fetch(email_id, "(RFC822)")
-            raw_email = data[0][1]
-            msg = email.message_from_bytes(raw_email)
-
-            sender = msg["From"]
-            subject = msg["Subject"]
-            body = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body += part.get_payload(decode=True).decode(errors='ignore')
-            else:
-                body = msg.get_payload(decode=True).decode(errors='ignore')
-
-            score, reasons = calculate_risk(sender, body)
-            results.append((sender, subject, score, reasons))
-
-        mail.logout()
+        with open("phishing_ml_model.pkl", "rb") as f:
+            model = pickle.load(f)
+        prediction = model.predict([email_text])[0]
+        prob = model.predict_proba([email_text])[0]
+        confidence = max(prob) * 100
+        label = "Phishing" if prediction == 1 else "Legitimate"
+        return label, confidence
     except Exception as e:
-        results.append(("Error", str(e), 0, []))
-    return results
+        return "Error", str(e)
 
-def fetch_emails_from_outlook():
-    return [("Outlook Support", "Not yet implemented - Microsoft Graph API required", 0, ["Placeholder"])]
 
 def run_gui():
-    def analyze_sample():
+    def analyze_email():
         sender = sender_entry.get()
-        body = body_text.get("1.0", tk.END)
-        score, reasons = calculate_risk(sender, body)
+        body = body_text.get("1.0", tk.END).strip()
+        method = detection_method.get()
+
         result_text.delete("1.0", tk.END)
-        result_text.insert(tk.END, f"Phishing Risk Score: {score}\n")
-        for reason in reasons:
-            result_text.insert(tk.END, f"- {reason}\n")
+
+        if method == "Rule-Based":
+            score, reasons = calculate_risk(sender, body)
+            result_text.insert(tk.END, f"Rule-Based Detection\nPhishing Risk Score: {score}\n")
+            for reason in reasons:
+                result_text.insert(tk.END, f"- {reason}\n")
+
+
+            for reason in reasons:
+                result_text.insert(tk.END, f"- {reason}\n")
+        elif method == "AI-Based":
+            label, confidence = ml_detect(body)
+            if isinstance(confidence, float):
+                result_text.insert(tk.END, f"AI-Based Detection\nPrediction: {label}\nConfidence: {confidence:.2f}%\n")
+            else:result_text.insert(tk.END, f"AI-Based Detection Failed:\n{confidence}\n")
+
 
     window = tk.Tk()
     window.title("Phishing Email Detector")
 
     tk.Label(window, text="Sender Email:").pack()
-    sender_entry = tk.Entry(window, width=50)
+    sender_entry = tk.Entry(window, width=60)
     sender_entry.pack()
 
     tk.Label(window, text="Email Body:").pack()
-    body_text = scrolledtext.ScrolledText(window, width=60, height=10)
+    body_text = scrolledtext.ScrolledText(window, width=70, height=10)
     body_text.pack()
 
-    tk.Button(window, text="Analyze", command=analyze_sample).pack(pady=10)
+    tk.Label(window, text="Detection Method:").pack()
+    detection_method = ttk.Combobox(window, values=["Rule-Based", "AI-Based"])
+    detection_method.current(0)
+    detection_method.pack()
+
+    tk.Button(window, text="Analyze", command=analyze_email).pack(pady=10)
 
     tk.Label(window, text="Results:").pack()
-    result_text = scrolledtext.ScrolledText(window, width=60, height=10)
+    result_text = scrolledtext.ScrolledText(window, width=70, height=10)
     result_text.pack()
 
     window.mainloop()
 
 if __name__ == "__main__":
-    # Run GUI for user interaction
     run_gui()
-
-    # Uncomment to fetch from Gmail
-    # results = fetch_emails_from_gmail("your_email@gmail.com", "your_password")
-    # for sender, subject, score, reasons in results:
-    #     print(f"\nFrom: {sender}\nSubject: {subject}")
-    #     print("Phishing Risk Score:", score)
-    #     for reason in reasons:
-    #         print("-", reason)
-
-    # Placeholder call for Outlook integration
-    # fetch_emails_from_outlook()
