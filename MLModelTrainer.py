@@ -1,38 +1,66 @@
 import pandas as pd
 import re
 import pickle
+import numpy as np
+
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import classification_report
 
-# Clean text function
+
+class ExtraFeatures(BaseEstimator, TransformerMixin):
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, texts):
+        features = []
+        for text in texts:
+            text = text.lower()
+            num_links = len(re.findall(r'https?://', text))
+            urgent_keywords = ["urgent", "immediately", "act now", "response required"]
+            has_urgent = int(any(word in text for word in urgent_keywords))
+            has_suspicious_phrase = int("verify your account" in text or "click the link" in text)
+            features.append([num_links, has_urgent, has_suspicious_phrase])
+        return np.array(features)
+
 def clean_text(text):
     text = text.lower()
     text = re.sub(r'http\S+|www\S+', '', text)  # Remove URLs
-    text = re.sub(r'[^a-zA-Z0-9 ]', '', text)    # Remove punctuation
+    text = re.sub(r'[^a-zA-Z0-9 ]', '', text)   # Remove punctuation
     return text
 
-# Load dataset (using CEAS_08.csv with 'body' and 'label' columns)
+
 data = pd.read_csv('/Users/cm/Phishing_Detection_System/CEAS_08.csv')
 data.dropna(subset=['body', 'label'], inplace=True)
 data['body'] = data['body'].apply(clean_text)
 
-# Split data
+X = data['body']
+y = data['label']
+
 X_train, X_test, y_train, y_test = train_test_split(
-    data['body'], data['label'], test_size=0.2, random_state=42
+    X, y, test_size=0.2, random_state=42
 )
 
-# Build model pipeline
-model = make_pipeline(TfidfVectorizer(), MultinomialNB())
-model.fit(X_train, y_train)
 
-# Evaluate
+combined_features = FeatureUnion([
+    ("tfidf", TfidfVectorizer(max_features=3000, stop_words='english')),
+    ("extra", ExtraFeatures())
+])
+
+
+model = Pipeline([
+    ("features", combined_features),
+    ("classifier", LogisticRegression(max_iter=1000))
+])
+
+
+model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 print(classification_report(y_test, y_pred))
 
-# Save model
 with open('phishing_ml_model.pkl', 'wb') as f:
     pickle.dump(model, f)
 

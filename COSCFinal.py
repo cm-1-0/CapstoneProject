@@ -1,10 +1,28 @@
 import re
 import pickle
+import numpy as np
 from urllib.parse import urlparse
 import imaplib
 import email
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, ttk
+from sklearn.base import BaseEstimator, TransformerMixin
+
+# --- Add ExtraFeatures for unpickling the model ---
+class ExtraFeatures(BaseEstimator, TransformerMixin):
+    def fit(self, x, y=None):
+        return self
+
+    def transform(self, texts):
+        features = []
+        for text in texts:
+            text = text.lower()
+            num_links = len(re.findall(r'https?://', text))
+            urgent_keywords = ["urgent", "immediately", "act now", "response required"]
+            has_urgent = int(any(word in text for word in urgent_keywords))
+            has_suspicious_phrase = int("verify your account" in text or "click the link" in text)
+            features.append([num_links, has_urgent, has_suspicious_phrase])
+        return np.array(features)
 
 # Suspicious keywords often found in phishing emails
 SUSPICIOUS_KEYWORDS = [
@@ -89,7 +107,6 @@ def ml_detect(email_text):
     except Exception as e:
         return "Error", str(e)
 
-
 def run_gui():
     def analyze_email():
         sender = sender_entry.get()
@@ -104,15 +121,12 @@ def run_gui():
             for reason in reasons:
                 result_text.insert(tk.END, f"- {reason}\n")
 
-
-            for reason in reasons:
-                result_text.insert(tk.END, f"- {reason}\n")
         elif method == "AI-Based":
             label, confidence = ml_detect(body)
             if isinstance(confidence, float):
                 result_text.insert(tk.END, f"AI-Based Detection\nPrediction: {label}\nConfidence: {confidence:.2f}%\n")
-            else:result_text.insert(tk.END, f"AI-Based Detection Failed:\n{confidence}\n")
-
+            else:
+                result_text.insert(tk.END, f"AI-Based Detection Failed:\n{confidence}\n")
 
     window = tk.Tk()
     window.title("Phishing Email Detector")
